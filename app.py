@@ -96,7 +96,7 @@ if st.session_state.prod_list:
         # Usuwanie (hack na refresh: używaj tylko tego kodu lokalnie/na własność)
         if st.session_state.get(f"del_{idx}", False):
             del st.session_state.prod_list[idx]
-            st.experimental_rerun()
+            st.rerun()
     st.markdown('</table>', unsafe_allow_html=True)
 
     if st.button("🚀 GENERUJ LINK DO KOSZYKA I QR", type="primary"):
@@ -116,13 +116,17 @@ if st.session_state.prod_list:
                     st.success("Twój koszyk jest gotowy!")
                     st.code(link)
                     qr = qrcode.make(link)
-                    buf=io.BytesIO(); qr.save(buf); st.image(buf.getvalue(), width=185)
+                                buf = io.BytesIO()
+                                qr.save(buf, format='PNG')
+                                buf.seek(0)
+                                st.image(buf, width=185)
                 else:
                     st.error("Błąd podczas generowania linku. Sprawdź, czy wszystkie produkty są aktualnie dostępne na stronie.")
             except Exception as e:
                 st.error(f"Błąd koszyka: {e}")
     if st.button("🗑️ Opróżnij koszyk"):
         st.session_state.prod_list.clear()
-        st.experimental_rerun()
+        st.rerun()
 else:
     st.info("Dodaj produkt przez wklejenie linku powyżej.")
+
