@@ -6,93 +6,99 @@ import pandas as pd
 import io
 import re
 
-GC_LOGO = "https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png"
-PLACE_IMG = GC_LOGO
+FALLBACK_IMG = "https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png"
+NAVY = "#0A2444"
+ORANGE = "#EBAF3A"
 
-st.set_page_config(page_title="Gruppo Corso Zamówienia", page_icon="🛒", layout="centered")
-st.markdown("""
+st.set_page_config(page_title="Gruppo Corso Koszyk", page_icon="🛒", layout="centered")
+st.markdown(f"""
     <style>
-        .block-container { max-width: 560px !important; margin: auto; padding:0 1vw;}
-        .main-title {font-size: 25px; color: #0A2444; text-align:center; font-weight:700; margin-bottom:15px;}
-        #MainMenu, header, footer {visibility: hidden;}
-        .custom-header { background: #fff; border-bottom:1px solid #eee; margin-bottom:16px;
-          padding:16px 0 12px 0; display:flex; flex-direction:column; align-items:center;}
-        .gc-logo {max-width: 120px;}
-        label {font-weight:500;}
-        .info-small {font-size:11px;color:#999;}
-        .add-section {background:#fff; border-radius:10px; margin-bottom:20px; box-shadow:0 1px 14px #0002; padding:18px;}
-        .carttable {width:100%; margin-bottom:14px;}
-        .cart-th, .cart-td {padding:6px 8px; font-size:15px;}
-        .cart-th {color:#0A2444; font-weight:700; background:#f7f7fa;}
-        .cartrow {border-bottom:1px solid #eee;}
-        .cart-img {height:48px; border-radius:4px; background:#eee;}
-        .cart-del {font-size:23px; color:#fff; background:#e30613;border-radius:8px; border:none;padding:4px 14px 7px 14px; cursor:pointer;}
-        .btn-gc {background: #EBAF3A; color:#fff; border:none; border-radius:5px; font-weight:700; font-size:15px; width:100%; margin:14px 0 8px 0; padding:15px 0;}
-        .btn-gc:hover {background:#f7b202;}
-        .qrbox {text-align:center; margin:12px auto;}
-        .error-el {background: #fff6f6; color:#b20019; border:1px solid #fbb; margin-top:10px; padding: 9px 14px; border-radius:7px;}
+        .block-container {{max-width: 540px !important; margin: auto; background:#fff; padding:0 2vw;}}
+        body, .stApp {{background: #fff !important; color:{NAVY};}}
+        .custom-header {{
+            padding-top:18px; padding-bottom:8px; display:flex; flex-direction:column; align-items:center; background:#fff;
+            border-bottom:2px solid {NAVY};
+        }}
+        .gc-logo {{max-width: 110px; padding-bottom:0;margin-bottom: -10px;}}
+        .main-title {{font-size: 26px; text-align:center; color:{NAVY}; font-weight:800; letter-spacing:0.03em;}}
+        label {{color:{NAVY}; font-size:15px;font-weight:600;}}
+        .add-section{{margin:22px 0 16px 0;padding: 22px 10px 18px 10px; background:#f8f9fb; border-radius:12px;box-shadow:0 2px 14px #15315918}} 
+        .btn-gc{{background:{ORANGE};color:#fff;border:none;border-radius:6px; font-weight:700;font-size:15px;width:100%;margin:14px 0 8px 0;padding:13px 0}}
+        .btn-gc:hover{{background:#FFB000;}}
+        .cart-img{{height:54px;border-radius:4px;background:#eee;}}
+        .carttable{{border-collapse:collapse;width:100%;}}
+        .cart-th{{padding:6px 8px;font-size:15px;color:{NAVY};background:#eef2fa;font-weight:700;}}
+        .cart-td{{font-size:15px;padding:7px 8px;vertical-align:middle;}}
+        .cart-del{{background:#b00028;color:#fff;border:none;width:34px;height:34px;border-radius:7px;text-align:center;font-size:19px;line-height:31px}}
+        .qrbox{{text-align:center;margin:12px auto;}}
     </style>
+    <div class="custom-header">
+        <img src="{FALLBACK_IMG}" class="gc-logo"/>
+        <div class="main-title">Zamówienia Gruppo Corso</div>
+    </div>
 """, unsafe_allow_html=True)
 
 if "prod_list" not in st.session_state:
     st.session_state.prod_list = []
 
-# Layout:
-st.markdown(f"""
-<div class="custom-header">
-    <img src="{GC_LOGO}" class="gc-logo"/>
-    <div class="main-title">Zamówienia B2B Gruppo Corso</div>
-</div>
-""", unsafe_allow_html=True)
+# Pobranie danych po linku, zwraca: id, nazwa, obrazek (z fallbackiem na logo GC)
+def get_product_from_link(link):
+    try:
+        session = requests.Session()
+        session.headers = {'User-Agent':'Mozilla/5.0'}
+        r = session.get(link, timeout=8)
+        soup = BeautifulSoup(r.content, "html.parser")
+        pidel = soup.find("input", {"name": "product"})
+        if not pidel: return None,None,None
+        pid = pidel["value"]
+        name = soup.find("h1",{"class":"page-title"})
+        name = name.get_text(strip=True) if name else link
+        # Pobierz pierwszy duży obrazek produktu, lub fallback (logo)
+        img = FALLBACK_IMG
+        ogimg = soup.find("meta",{"property":"og:image"})
+        if ogimg and ogimg.get("content") and "logo" not in ogimg.get("content"):
+            img = ogimg["content"]
+        else:
+            imgtag = soup.find("img",{"class":"fotorama__img"}) or soup.find("img",{"class":"gallery-placeholder__image"})
+            if imgtag and imgtag.get("src"): img = imgtag["src"]
+        return pid, name, img
+    except:
+        return None,None,FALLBACK_IMG
 
 st.markdown('<div class="add-section">', unsafe_allow_html=True)
-with st.form("Załaduj produkt po linku"):
+with st.form("addprod"):
     c1, c2 = st.columns([3,1])
     link = c1.text_input("Link do produktu", placeholder="https://www.gruppocorso.nl/...")
     qty = c2.number_input("Ilość", min_value=1, value=1, step=1)
     addok = st.form_submit_button("Dodaj ➕")
     if addok:
         if not link.startswith("http"):
-            st.warning("Podaj prawidłowy link do produktu!")
+            st.warning("Podaj prawidłowy link do produktu (https...)!")
         else:
-            try:
-                session = requests.Session()
-                session.headers = {'User-Agent':'Mozilla/5.0'}
-                r = session.get(link, timeout=7)
-                soup = BeautifulSoup(r.text, "html.parser")
-                pidelm = soup.find("input", {"name":"product"})
-                if not pidelm:
-                    st.warning("Nie znaleziono ID produktu na stronie. Upewnij się, że to link do DETALICZNEJ karty produktu!")
-                else:
-                    pid = pidelm["value"]
-                    name = (soup.find("h1", {"class":"page-title"}).get_text(strip=True)
-                               if soup.find("h1", {"class":"page-title"}) else link)
-                    img = (soup.find("meta", {"property":"og:image"}).get("content")
-                        if soup.find("meta", {"property":"og:image"}) else PLACE_IMG)
-                    st.session_state.prod_list.append({"id":pid,"name":name,"qty":qty,"img":img,"link":link})
-                    st.success("Dodano do koszyka.")
-            except Exception as e:
-                st.error("Błąd pobierania produktu. Ten link jest nieprawidłowy lub niedostępny.")
+            pid, name, img = get_product_from_link(link)
+            if not pid:
+                st.warning("Nie znaleziono produktu po tym linku.")
+            else:
+                st.session_state.prod_list.append({"id": pid, "name": name, "img": img, "qty": qty, "link": link})
+
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Cart Table (ładny, zawsze box)
+# Koszyk (ładne kafelki na białym tle)
 if st.session_state.prod_list:
-    st.markdown('<div style="font-size:20px;font-weight:700;margin:18px 0 8px 0;">Produkty w koszyku</div>', unsafe_allow_html=True)
     st.markdown('<table class="carttable"><tr class="cart-th"><td>Foto</td><td>Nazwa</td><td>Ilość</td><td>Usuń</td></tr>', unsafe_allow_html=True)
     for idx, p in enumerate(st.session_state.prod_list):
         st.markdown(
-            f'<tr class="cartrow">'
-            f'<td class="cart-td"><img src="{p["img"]}" class="cart-img"></td>'
-            f'<td class="cart-td">{p["name"]}<br/><span class="info-small"><a href="{p["link"]}" target="_blank">{p["link"]}</a></span></td>'
+            f'<tr><td class="cart-td"><img src="{p["img"]}" class="cart-img"></td>'
+            f'<td class="cart-td">{p["name"]}<br/><span style="font-size:11px;color:#888"><a href="{p["link"]}" target="_blank">{p["link"]}</a></span></td>'
             f'<td class="cart-td">{int(p["qty"])}</td>'
-            f'<td class="cart-td"><form action="" method="post"><button class="cart-del" name="del_{idx}">🗑️</button></form></td>'
-            f'</tr>', unsafe_allow_html=True)
+            f'<td class="cart-td"><form action="" method="post"><button class="cart-del" name="del_{idx}">✕</button></form></td>'
+            '</tr>', unsafe_allow_html=True)
+        # Usuwanie (hack na refresh: używaj tylko tego kodu lokalnie/na własność)
         if st.session_state.get(f"del_{idx}", False):
             del st.session_state.prod_list[idx]
             st.experimental_rerun()
     st.markdown('</table>', unsafe_allow_html=True)
-        
-    # Generate button
+
     if st.button("🚀 GENERUJ LINK DO KOSZYKA I QR", type="primary"):
         with st.spinner("Tworzę koszyk..."):
             try:
@@ -107,18 +113,16 @@ if st.session_state.prod_list:
                 mt = re.search(r'sharecart\/shared\/get\/id\/[^"]+', sr.text)
                 if mt:
                     link = f"https://www.gruppocorso.nl/{mt.group(0)}".replace('"','')
-                    st.success("Link wygenerowany!")
+                    st.success("Twój koszyk jest gotowy!")
                     st.code(link)
                     qr = qrcode.make(link)
-                    buf=io.BytesIO(); qr.save(buf); st.image(buf.getvalue(), width=180)
+                    buf=io.BytesIO(); qr.save(buf); st.image(buf.getvalue(), width=185)
                 else:
-                    st.markdown('<div class="error-el">Błąd podczas generowania linku. Sprawdź, czy wszystkie produkty są dostępne.</div>', unsafe_allow_html=True)
+                    st.error("Błąd podczas generowania linku. Sprawdź, czy wszystkie produkty są aktualnie dostępne na stronie.")
             except Exception as e:
-                st.markdown(f'<div class="error-el">Błąd: {e}</div>', unsafe_allow_html=True)
-    if st.button("🗑️ Opróżnij cały koszyk"):
+                st.error(f"Błąd koszyka: {e}")
+    if st.button("🗑️ Opróżnij koszyk"):
         st.session_state.prod_list.clear()
         st.experimental_rerun()
 else:
-    st.info("Dodaj produkty przez link z karty produktu Gruppo Corso.")
-
-st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+    st.info("Dodaj produkt przez wklejenie linku powyżej.")
