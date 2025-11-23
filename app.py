@@ -141,7 +141,6 @@ if len(st.session_state.koszyk):
 else:
     st.info("Dodaj pierwszy produkt do zamówienia powyżej.")
 
----
-
 ### 2. Przygotuj `requirements.txt` (do GitHub repo):
+
 
