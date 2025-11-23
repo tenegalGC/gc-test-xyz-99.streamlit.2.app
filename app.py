@@ -7,140 +7,134 @@ from PIL import Image
 import io
 import re
 
-# --- BRANDING JAK GRUPPO CORSO ---
-st.set_page_config(page_title="Gruppo Corso B2B Zamówienia", page_icon="🛒", layout="wide")
+# -- BRANDING/STYL GC --
+st.set_page_config(page_title="Gruppo Corso Generator", page_icon="🛒", layout="centered")
 st.markdown("""
     <style>
-        body {background: #f4f4f4;}
-        .block-container {padding-top: 0;}
-        #MainMenu, #main-menu {visibility: hidden;}
-        footer {visibility: hidden;}
+        .block-container {padding-top:0;}
+        #MainMenu, header, footer {visibility: hidden;}
+        body, .stApp {background: #f4f4f4;}
         .custom-header {
-            background-color: white; border-bottom: 1px solid #eee; display: flex; align-items: center;
-            padding: 13px 20px 13px 10px; margin-bottom:20px;
+            margin-top:0px; margin-bottom:25px; display: flex; flex-direction:column; align-items: center;
         }
-        .logo {height: 41px;}
-        .app-title {color: #0A2444; font-size: 21px; font-weight:700; margin-left:12px;}
-        .btn-yellow button {
-            background: #EBAF3A !important; color: #fff !important; font-weight: bold;
-        }
-        .btn-blue button {
-            background: #0A2444 !important; color: #fff !important; font-weight: bold;
-            border:none;
-        }
-        .stDataFrame img {border-radius:6px;}
-        .stDataFrame {background: #fff;}
+        .gc-logo {width: 120px;}
+        .main-title {font-size: 28px; color: #0a2444; font-weight: bold; margin-top: 16px; text-align:center;}
+        .add-section {background:#fff; border-radius:8px; margin-bottom:20px; box-shadow:0 1px 10px #0001; padding:20px;}
+        .btn-gc {background: #EBAF3A !important; color:#fff !important; border:none; border-radius:5px; font-weight:600;}
+        .big-btn {font-size:16px !important; width:100% !important;}
+        .rm-btn {color: #fff !important; background: #b00028 !important; border:none;}
+        table, .stDataFrame {background:#fff !important;}
+        td, th {font-size:15px;}
+        @media (max-width:800px) { .main-title{font-size:20px;} }
     </style>
     <div class="custom-header">
-        <img src="https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png" class="logo">
-        <span class="app-title">Zamówienia B2B - Gruppo Corso</span>
+        <img src="https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png" class="gc-logo"/>
+        <div class="main-title">Generator Koszyków B2B dla Gruppo Corso</div>
     </div>
 """, unsafe_allow_html=True)
 
-if 'koszyk' not in st.session_state:
-    st.session_state.koszyk = []
+# --- KOSZYK jako zmienna sesyjna (trwała) ---
+if 'products' not in st.session_state:
+    st.session_state.products = []
 
-# --- Funkcja pobierania ID, nazwy i obrazka z linku ---
-def get_product_info(url_or_id):
-    session = requests.Session()
-    session.headers = {'User-Agent': 'Mozilla/5.0'}
-    if "http" not in url_or_id:
-        return url_or_id, f"Produkt {url_or_id}", "https://placehold.co/60x60"
+# --- Pobieranie danych produktu tylko z linku ---
+def get_product_from_link(link):
     try:
-        r = session.get(url_or_id, timeout=6)
-        if r.status_code != 200: return None, None, None
-        soup = BeautifulSoup(r.text, 'html.parser')
-        pid = soup.find("input", {"name": "product"})
-        pid = pid["value"] if pid else None
-        name = (soup.find("h1", {"class": "page-title"}).get_text(strip=True)
-                if soup.find("h1", {"class": "page-title"}) else "Produkt")
-        img = None
-        img_meta = soup.find("meta", {"property": "og:image"})
-        if img_meta:
-            img = img_meta["content"]
-        else:
-            img = "https://placehold.co/60x60"
+        session = requests.Session()
+        session.headers = {'User-Agent': 'Mozilla/5.0'}
+        r = session.get(link, timeout=8)
+        soup = BeautifulSoup(r.content, "html.parser")
+        pid_input = soup.find("input", {"name": "product"})
+        if not pid_input:
+            return None, None, None
+        pid = pid_input["value"]
+        name = soup.find("h1", {"class": "page-title"})
+        name = name.get_text(strip=True) if name else "Produkt (brak nazwy)"
+        img = soup.find("meta", {"property":"og:image"})
+        img = img["content"] if img and img.has_attr("content") else "https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png"
         return pid, name, img
     except:
-        return None, None, None
+        return None, None, "https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png"
 
-# --- Funkcja generowania linku koszyka ---
-def create_magento_cart(cart_items):
-    session = requests.Session()
-    session.headers = {'User-Agent': 'Mozilla/5.0'}
-    base_url = "https://www.gruppocorso.nl"
-    try:
-        r = session.get(f"{base_url}/checkout/cart/")
-        form_key = BeautifulSoup(r.text, 'html.parser').find("input", {"name": "form_key"})["value"]
-        for item in cart_items:
-            session.post(f"{base_url}/checkout/cart/add/product/{item['id']}/", 
-                         data={"product": item['id'], "qty": item['qty'], "form_key": form_key})
-        share_r = session.get(f"{base_url}/sharecart/index/email/")
-        match = re.search(r'sharecart\/shared\/get\/id\/[^"]+', share_r.text)
-        if match: return f"{base_url}/{match.group(0)}".replace('"', '')
-        return None
-    except: return None
+# --- DODAWANIE PRODUKTÓW ---
+st.markdown('<div class="add-section">', unsafe_allow_html=True)
+with st.form("add-prod"):
+    c1, c2, c3 = st.columns([4,2,1])
+    with c1:
+        link = st.text_input("Link do produktu ze strony Gruppo Corso", key="prod_url",
+                             placeholder="https://www.gruppocorso.nl/nazwa-produktu")
+    with c2:
+        qty = st.number_input("Ilość", min_value=1, max_value=250, value=1, key="prod_qty")
+    with c3:
+        st.markdown(" ")
+        add_btn = st.form_submit_button("Dodaj ➕", use_container_width=True)
+    st.caption("**Wklej TYLKO link do produktu, np. ze strony wyszukiwania lub listingu.**")
 
-# --- UI: Panel dodawania produktu ---
-st.markdown("#### Dodaj produkt do zamówienia")
-col1, col2 = st.columns([5, 2])
-with col1:
-    inp = st.text_input("Link do produktu / ID", placeholder="np. https://www.gruppocorso.nl/etalagepoppen/xyz", label_visibility="collapsed", key="prod_inp")
-with col2:
-    qty = st.number_input("Ilość", min_value=1, max_value=500, step=1, value=1, label_visibility="collapsed", key="qty_inp")
+st.markdown('</div>', unsafe_allow_html=True)
 
-add_btn = st.button("Dodaj", key="add_btn", help="Dodaj produkt do zamówienia", use_container_width=True)
-
-# --- Dodanie produktu do koszyka po kliknięciu ---
-if add_btn and inp:
-    with st.spinner("Pobieram dane produktu..."):
-        pid, name, img_url = get_product_info(inp)
-        if pid:
-            st.session_state.koszyk.append({"img": img_url, "name": name, "id": pid, "qty": qty})
-            st.success(f'Dodano: {name}')
-            st.experimental_rerun()
-        else:
-            st.error("Nie udało się pobrać produktu. Sprawdź link lub ID!")
-
-# --- TABELA ZAMÓWIENIA ---
-if len(st.session_state.koszyk):
-    st.markdown("#### Wybrany koszyk produktów")
-    df = pd.DataFrame(st.session_state.koszyk)
-    edited = st.data_editor(
-        df,
-        column_config={
-            "img": st.column_config.ImageColumn("Zdjęcie", width="small"),
-            "name": st.column_config.TextColumn("Nazwa", disabled=True),
-            "id": st.column_config.TextColumn("ID", disabled=True),
-            "qty": st.column_config.NumberColumn("Ilość", min_value=1, step=1)
-        },
-        hide_index=True,
-        use_container_width=True,
-        num_rows="dynamic"
-    )
-    
-    st.markdown("---")
-    if st.button("GEN-GRUPO LINK & QR", type="primary", use_container_width=True, key="btn_gen"):
-        fin_items = edited.to_dict('records')
-        with st.spinner("Generuję link do koszyka..."):
-            link = create_magento_cart(fin_items)
-            if link:
-                st.success("Gotowe! Oto link dla klienta:")
-                st.code(link)
-                qr = qrcode.QRCode(box_size=7, border=2)
-                qr.add_data(link)
-                qr.make(fit=True)
-                buf = io.BytesIO()
-                qr.make_image(fill_color="black", back_color="white").save(buf)
-                st.image(buf, width=200)
+if add_btn:
+    if not link.startswith("http"):
+        st.error("Proszę podać prawidłowy link (https...)!")
+    else:
+        with st.spinner("Pobieram dane produktu..."):
+            pid, name, image = get_product_from_link(link)
+            if not pid:
+                st.error("Nie udało się znaleźć tego produktu po linku.")
             else:
-                st.error("Błąd podczas generowania linku do koszyka!")
-    if st.button("🗑️ Wyczyść koszyk", use_container_width=True, key="btn_clear"):
-        st.session_state.koszyk = []
+                st.session_state.products.append(
+                    {"pid": pid, "sku": link, "name": name, "qty": int(qty), "img": image}
+                )
+                st.success(f"Dodano do koszyka: {name}")
+
+# --- WYŚWIETLANIE KOSZYKA (edycja i usuwanie) ---
+if st.session_state.products:
+    st.markdown("### Produkty w koszyku")
+    # tabelka headery
+    cols_t = st.columns([1.3, 4, 2, 1])
+    cols_t[0].markdown("**Foto**")
+    cols_t[1].markdown("**Nazwa produktu**")
+    cols_t[2].markdown("**Ilość**")
+    cols_t[3].markdown("**Usuń**")
+    # produkty: po jednym wierszu (ładna lista)
+    for idx, prod in enumerate(st.session_state.products):
+        cols = st.columns([1.3, 4, 2, 1])
+        cols[0].image(prod['img'], width=56)
+        cols[1].markdown(f"{prod['name']}<br/><span style='font-size:11px;color:#888'>{prod['sku']}</span>", unsafe_allow_html=True)
+        prod['qty'] = cols[2].number_input(
+            f"Ilość_{idx}", min_value=1, max_value=250, value=prod['qty'],
+            key=f"q_{idx}"
+        )
+        if cols[3].button("🗑️", key=f"del_{idx}", help="Usuń produkt", type="primary"):
+            st.session_state.products.pop(idx)
+            st.experimental_rerun()
+
+    st.markdown("---")
+    if st.button("🚀 GENERUJ LINK DO KOSZYKA i QR", type="primary", use_container_width=True):
+        # budowanie koszyka na bazie PID (Magento nie używa SKU/Link tylko PID do add-to-cart)
+        with st.spinner("Tworzę link..."):
+            session = requests.Session()
+            session.headers = {'User-Agent': 'Mozilla/5.0'}
+            base_url = "https://www.gruppocorso.nl"
+            response = session.get(f"{base_url}/checkout/cart/")
+            form_key = BeautifulSoup(response.text, 'html.parser').find("input", {"name": "form_key"})["value"]
+            for p in st.session_state.products:
+                session.post(f"{base_url}/checkout/cart/add/product/{p['pid']}/",
+                             data={"product": p['pid'], "qty": p['qty'], "form_key": form_key})
+            share_r = session.get(f"{base_url}/sharecart/index/email/")
+            match = re.search(r'sharecart\/shared\/get\/id\/[^"]+', share_r.text)
+            if match:
+                link = f"{base_url}/{match.group(0)}".replace('"', '')
+                st.success("Twój koszyk jest gotowy! Oto link dla klienta:")
+                st.code(link)
+                qr = qrcode.make(link)
+                buf = io.BytesIO()
+                qr.save(buf, format="PNG")
+                st.image(buf, width=190)
+            else:
+                st.error("Błąd podczas generowania linku do koszyka. Sprawdź, czy wszystkie produkty są dostępne na stronie.")
+
+    if st.button("🗑️ Opróżnij cały koszyk"):
+        st.session_state.products.clear()
         st.experimental_rerun()
 else:
-    st.info("Dodaj pierwszy produkt do zamówienia powyżej.")
-
-### 2. Przygotuj `requirements.txt` (do GitHub repo):
-
-
+    st.info("Dodaj produkty przez wklejenie linków powyżej.")
