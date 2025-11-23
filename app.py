@@ -1,133 +1,110 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+import random
 import qrcode
-import pandas as pd
 import io
-import re
 
-FALLBACK_IMG = "https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png"
-NAVY = "#0A2444"
-ORANGE = "#EBAF3A"
+# Demo produkty (Mini-katalog kafelkowy)
+PRODUCTS = [
+    {"id": 1, "name": "Manekin sklepowy", "img": "https://placehold.co/70x70?text=Manekin", "price": 129.00},
+    {"id": 2, "name": "Torso Męskie", "img": "https://placehold.co/70x70?text=Torso", "price": 89.00},
+    {"id": 3, "name": "Wieszak metalowy", "img": "https://placehold.co/70x70?text=Wieszak", "price": 9.99},
+    {"id": 4, "name": "Lampa sklepowa", "img": "https://placehold.co/70x70?text=Lampa", "price": 75.00},
+    {"id": 5, "name": "Toonbank", "img": "https://placehold.co/70x70?text=Toonbank", "price": 499.00},
+    {"id": 6, "name": "Półka szklana", "img": "https://placehold.co/70x70?text=Półka", "price": 110.50},
+    {"id": 7, "name": "Regał na odzież", "img": "https://placehold.co/70x70?text=Regał", "price": 299.00},
+    {"id": 8, "name": "Krzesło eventowe", "img": "https://placehold.co/70x70?text=Krzesło", "price": 35.00},
+    {"id": 9, "name": "Stolik Cafe", "img": "https://placehold.co/70x70?text=Stolik", "price": 59.90},
+    {"id":10, "name": "Lustro sklepowe", "img": "https://placehold.co/70x70?text=Lustro", "price": 145.00},
+    {"id":11, "name": "Kosz promocyjny", "img": "https://placehold.co/70x70?text=Kosz", "price": 25.00},
+    {"id":12, "name": "Ekspozytor akrylowy", "img": "https://placehold.co/70x70?text=Ekspozytor", "price": 17.90},
+]
 
-st.set_page_config(page_title="Gruppo Corso Koszyk", page_icon="🛒", layout="centered")
-st.markdown(f"""
+st.set_page_config(page_title="Gruppo Corso – Order Demo", page_icon="🛒", layout="wide")
+st.markdown("""
     <style>
-        .block-container {{max-width: 540px !important; margin: auto; background:#fff; padding:0 2vw;}}
-        body, .stApp {{background: #fff !important; color:{NAVY};}}
-        .custom-header {{
-            padding-top:18px; padding-bottom:8px; display:flex; flex-direction:column; align-items:center; background:#fff;
-            border-bottom:2px solid {NAVY};
-        }}
-        .gc-logo {{max-width: 110px; padding-bottom:0;margin-bottom: -10px;}}
-        .main-title {{font-size: 26px; text-align:center; color:{NAVY}; font-weight:800; letter-spacing:0.03em;}}
-        label {{color:{NAVY}; font-size:15px;font-weight:600;}}
-        .add-section{{margin:22px 0 16px 0;padding: 22px 10px 18px 10px; background:#f8f9fb; border-radius:12px;box-shadow:0 2px 14px #15315918}} 
-        .btn-gc{{background:{ORANGE};color:#fff;border:none;border-radius:6px; font-weight:700;font-size:15px;width:100%;margin:14px 0 8px 0;padding:13px 0}}
-        .btn-gc:hover{{background:#FFB000;}}
-        .cart-img{{height:54px;border-radius:4px;background:#eee;}}
-        .carttable{{border-collapse:collapse;width:100%;}}
-        .cart-th{{padding:6px 8px;font-size:15px;color:{NAVY};background:#eef2fa;font-weight:700;}}
-        .cart-td{{font-size:15px;padding:7px 8px;vertical-align:middle;}}
-        .cart-del{{background:#b00028;color:#fff;border:none;width:34px;height:34px;border-radius:7px;text-align:center;font-size:19px;line-height:31px}}
-        .qrbox{{text-align:center;margin:12px auto;}}
+        body, .stApp {background: #e8ecf4;}
+        .main-header {background:#131829;padding:14px 28px 13px 28px;margin-bottom:27px; border-radius:0 0 14px 14px;}
+        .header-content {display:flex;align-items:center;}
+        .header-logo {max-width:42px;margin-right:13px;}
+        .header-title {color:#fff;font-size:23px;font-weight:600;letter-spacing:0.5px;}
+        .catalog-col {background:#fff; border-radius:15px;padding:24px;min-width:340px;}
+        .order-col {background:#f9fafc;border-radius:16px;padding:20px 18px 20px 22px; min-width:350px;border-left:3px solid #EBAF3A;}
+        .product-item {background:#f5f7fa; border-radius:9px; padding:9px 10px;display:flex;align-items:center;margin-bottom:13px;}
+        .prod-img-thumb {height:47px;width:47px;border-radius:7px;margin-right:15px;background:#eee;}
+        .prod-name {font-weight:600;font-size:15px;color:#131829;}
+        .buy-btn {margin-left:auto; background:#EBAF3A;color:#fff;font-weight:700;border:none; border-radius:7px;padding:9px 15px;}
+        .buy-btn:hover {background:#ffb200;}
+        .order-header {font-size:16px;font-weight:700;margin-bottom:10px;color:#0A2444;}
+        .order-row {display:flex;align-items:center;margin-bottom:10px;}
+        .order-img {height:36px;width:36px;border-radius:7px;margin-right:12px;}
+        .order-remove-btn {background:#bb1436;color:#fff;font-size:21px;border:none;margin-left:9px;border-radius:7px;width:33px;height:33px;}
+        .order-price {font-weight:600;margin-left:auto;}
+        .qr-panel {background:#fff; border-radius:12px;padding:17px;text-align:center;}
     </style>
-    <div class="custom-header">
-        <img src="{FALLBACK_IMG}" class="gc-logo"/>
-        <div class="main-title">Zamówienia Gruppo Corso</div>
+    <div class="main-header">
+      <div class="header-content">
+        <img class="header-logo" src="https://www.gruppocorso.nl/media/logo/stores/1/logo_gruppo_corso.png" alt="logo"/>
+        <span class="header-title">Gruppo Corso – Order Management</span>
+      </div>
     </div>
 """, unsafe_allow_html=True)
 
-if "prod_list" not in st.session_state:
-    st.session_state.prod_list = []
+if "order" not in st.session_state:     st.session_state.order = {}
+if "next_qr" not in st.session_state:   st.session_state.next_qr = ""
 
-# Pobranie danych po linku, zwraca: id, nazwa, obrazek (z fallbackiem na logo GC)
-def get_product_from_link(link):
-    try:
-        session = requests.Session()
-        session.headers = {'User-Agent':'Mozilla/5.0'}
-        r = session.get(link, timeout=8)
-        soup = BeautifulSoup(r.content, "html.parser")
-        pidel = soup.find("input", {"name": "product"})
-        if not pidel: return None,None,None
-        pid = pidel["value"]
-        name = soup.find("h1",{"class":"page-title"})
-        name = name.get_text(strip=True) if name else link
-        # Pobierz pierwszy duży obrazek produktu, lub fallback (logo)
-        img = FALLBACK_IMG
-        ogimg = soup.find("meta",{"property":"og:image"})
-        if ogimg and ogimg.get("content") and "logo" not in ogimg.get("content"):
-            img = ogimg["content"]
-        else:
-            imgtag = soup.find("img",{"class":"fotorama__img"}) or soup.find("img",{"class":"gallery-placeholder__image"})
-            if imgtag and imgtag.get("src"): img = imgtag["src"]
-        return pid, name, img
-    except:
-        return None,None,FALLBACK_IMG
+# --- LEWA KOLUMN -- produkt gallery
+cols = st.columns([2.7, 1])        # LEFT:catalog, RIGHT:order
+with cols[0]:
+    st.markdown('<div class="catalog-col">', unsafe_allow_html=True)
+    st.markdown("<b>Product Catalog</b>", unsafe_allow_html=True)
+    # Kafelki 3x4
+    for i in range(0, len(PRODUCTS), 3):
+        row = st.columns(3)
+        for j, idx in enumerate(range(i, min(i+3, len(PRODUCTS)))):
+            p = PRODUCTS[idx]
+            with row[j]:
+                st.markdown(
+                    f'<div class="product-item">'
+                    f'<img src="{p["img"]}" class="prod-img-thumb"/>'
+                    f'<span class="prod-name">{p["name"]}</span>'
+                    f'<form style="display:inline" action="" method="post">'
+                    f'  <button class="buy-btn" name="add_{p["id"]}">Add</button>'
+                    f'</form></div>', unsafe_allow_html=True)
+                if st.session_state.get(f"add_{p['id']}", False):
+                    # Dodaj 1 do koszyka
+                    st.session_state.order[p["id"]] = st.session_state.order.get(p["id"], 0) + 1
+                    st.experimental_rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="add-section">', unsafe_allow_html=True)
-with st.form("addprod"):
-    c1, c2 = st.columns([3,1])
-    link = c1.text_input("Link do produktu", placeholder="https://www.gruppocorso.nl/...")
-    qty = c2.number_input("Ilość", min_value=1, value=1, step=1)
-    addok = st.form_submit_button("Dodaj ➕")
-    if addok:
-        if not link.startswith("http"):
-            st.warning("Podaj prawidłowy link do produktu (https...)!")
-        else:
-            pid, name, img = get_product_from_link(link)
-            if not pid:
-                st.warning("Nie znaleziono produktu po tym linku.")
-            else:
-                st.session_state.prod_list.append({"id": pid, "name": name, "img": img, "qty": qty, "link": link})
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Koszyk (ładne kafelki na białym tle)
-if st.session_state.prod_list:
-    st.markdown('<table class="carttable"><tr class="cart-th"><td>Foto</td><td>Nazwa</td><td>Ilość</td><td>Usuń</td></tr>', unsafe_allow_html=True)
-    for idx, p in enumerate(st.session_state.prod_list):
-        st.markdown(
-            f'<tr><td class="cart-td"><img src="{p["img"]}" class="cart-img"></td>'
-            f'<td class="cart-td">{p["name"]}<br/><span style="font-size:11px;color:#888"><a href="{p["link"]}" target="_blank">{p["link"]}</a></span></td>'
-            f'<td class="cart-td">{int(p["qty"])}</td>'
-            f'<td class="cart-td"><form action="" method="post"><button class="cart-del" name="del_{idx}">✕</button></form></td>'
-            '</tr>', unsafe_allow_html=True)
-        # Usuwanie (hack na refresh: używaj tylko tego kodu lokalnie/na własność)
-        if st.session_state.get(f"del_{idx}", False):
-            del st.session_state.prod_list[idx]
-            st.rerun()
-    st.markdown('</table>', unsafe_allow_html=True)
-
-    if st.button("🚀 GENERUJ LINK DO KOSZYKA I QR", type="primary"):
-        with st.spinner("Tworzę koszyk..."):
-            try:
-                session = requests.Session()
-                session.headers = {'User-Agent':'Mozilla/5.0'}
-                r = session.get("https://www.gruppocorso.nl/checkout/cart/")
-                fk = BeautifulSoup(r.text, "html.parser").find("input",{"name":"form_key"})["value"]
-                for p in st.session_state.prod_list:
-                    session.post(f"https://www.gruppocorso.nl/checkout/cart/add/product/{p['id']}/",
-                        data={"product":p['id'],"qty":p['qty'],"form_key":fk})
-                sr = session.get("https://www.gruppocorso.nl/sharecart/index/email/")
-                mt = re.search(r'sharecart\/shared\/get\/id\/[^"]+', sr.text)
-                if mt:
-                    link = f"https://www.gruppocorso.nl/{mt.group(0)}".replace('"','')
-                    st.success("Twój koszyk jest gotowy!")
-                    st.code(link)
-                    qr = qrcode.make(link)
-                    buf = io.BytesIO()
-                    qr.save(buf, format='PNG')
-                    buf.seek(0)
-                    st.image(buf, width=185)
-                else:
-                    st.error("Błąd podczas generowania linku. Sprawdź, czy wszystkie produkty są aktualnie dostępne na stronie.")
-            except Exception as e:
-                st.error(f"Błąd koszyka: {e}")
-    if st.button("🗑️ Opróżnij koszyk"):
-        st.session_state.prod_list.clear()
-        st.rerun()
-else:
-    st.info("Dodaj produkt przez wklejenie linku powyżej.")
-
+# --- PRAWO: zamówienie
+with cols[1]:
+    st.markdown('<div class="order-col">', unsafe_allow_html=True)
+    st.markdown('<span class="order-header">Current Order</span>', unsafe_allow_html=True)
+    total = 0.0
+    for pid, qty in st.session_state.order.items():
+        prod = next((p for p in PRODUCTS if p["id"] == pid), None)
+        if not prod: continue
+        row = st.columns([1, 4, 2, 1])
+        row[0].image(prod["img"], width=36)
+        row[1].markdown(f'<span>{prod["name"]}</span>', unsafe_allow_html=True)
+        row[2].markdown(f"Qty: <b>{qty}</b>", unsafe_allow_html=True)
+        if row[3].button("✕", key=f"rem_{pid}"):
+            del st.session_state.order[pid]
+            st.experimental_rerun()
+        total += prod["price"] * qty
+    st.markdown("---")
+    # QR panel
+    st.markdown('<div class="qr-panel">', unsafe_allow_html=True)
+    if st.button("Generate QR Code", key="qrbtn", type="primary", use_container_width=True):
+        code = "ORDER-" + str(random.randint(1000,99999))
+        st.session_state.next_qr = code
+    if st.session_state.next_qr:
+        qrimg = qrcode.make(st.session_state.next_qr)
+        b = io.BytesIO()
+        qrimg.save(b)
+        st.image(b.getvalue(), width=140)
+        st.write(f"QR for: {st.session_state.next_qr}")
+    st.markdown(f"**Total:** <span style='font-size:19px;color:#0A2444;font-weight:900'>{total:.2f} zł</span>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
