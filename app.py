@@ -116,10 +116,10 @@ if st.session_state.prod_list:
                     st.success("Twój koszyk jest gotowy!")
                     st.code(link)
                     qr = qrcode.make(link)
-                                buf = io.BytesIO()
-                                qr.save(buf, format='PNG')
-                                buf.seek(0)
-                                st.image(buf, width=185)
+                    buf = io.BytesIO()
+                    qr.save(buf, format='PNG')
+                    buf.seek(0)
+                    st.image(buf, width=185)
                 else:
                     st.error("Błąd podczas generowania linku. Sprawdź, czy wszystkie produkty są aktualnie dostępne na stronie.")
             except Exception as e:
@@ -129,4 +129,5 @@ if st.session_state.prod_list:
         st.rerun()
 else:
     st.info("Dodaj produkt przez wklejenie linku powyżej.")
+
 
