@@ -14,6 +14,8 @@ ASSETS = APP_DIR / "assets"
 DATA_DIR = APP_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 ORDERS_FILE = DATA_DIR / "orders.csv"
+# UWAGA: dysk na Streamlit Cloud jest ulotny – ten plik ginie przy restarcie
+# kontenera. Przed produkcją przenieść zapis do Google Sheets. Szczegóły w CLAUDE.md.
 
 # Uzupełnij własnymi linkami, gdy będą gotowe – jeśli puste, ikonki pokażą się bez linku.
 INSTAGRAM_URL = ""
